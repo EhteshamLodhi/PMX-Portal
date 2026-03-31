@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>User Management — Powermatix</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="/shared/layout.css" rel="stylesheet">
+  <script src="/shared/portalState.js"></script>
+  <script src="/shared/permissions.js"></script>
+  <script src="/shared/layout.js"></script>
+  <style>
+    .admin-container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 24px 80px 24px;
+    }
+    
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    
+    .admin-header h1 {
+      font-size: 24px;
+      margin: 0;
+      font-weight: 700;
+    }
+    
+    .btn-primary {
+      background: var(--green);
+      color: var(--dark);
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s ease;
+    }
+    
+    .btn-primary:hover {
+      background: var(--green-d);
+    }
+    
+    .card {
+      background: var(--dark2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    
+    th {
+      background: var(--dark3);
+      padding: 14px 16px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border2);
+      font-weight: 600;
+    }
+    
+    td {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      vertical-align: middle;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .user-td-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--dark3);
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: var(--green);
+      font-size: 13px;
+    }
+    
+    .user-name {
+      font-weight: 600;
+      display: block;
+    }
+    
+    .user-email {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+      display: block;
+    }
+    
+    .role-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    
+    .role-admin { background: rgba(244, 197, 66, 0.15); color: var(--yellow); }
+    .role-manager { background: rgba(86, 204, 242, 0.15); color: var(--cyan); }
+    .role-engineer { background: rgba(139, 148, 158, 0.15); color: var(--text); }
+    
+    .table-actions button {
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    
+    .table-actions button:hover {
+      border-color: var(--muted);
+      background: var(--dark3);
+    }
+    
+    @media (max-width: 768px) {
+      .admin-container { padding-top: 20px; }
+      th, td { padding: 12px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app-main">
+    <div class="admin-container">
+      
+      <div class="admin-header">
+        <h1>User Management</h1>
+        <button class="btn-primary"><span>+</span> Invite User</button>
+      </div>
+      
+      <div class="card">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Manager</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody">
+              <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px;">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('portalStateLoaded', async () => {
+      // Security check: Only Admins can view this page
+      if (window.portalState.Profile.role !== 'admin') {
+        document.querySelector('.admin-container').innerHTML = `
+          <div style="text-align:center; padding: 60px 20px;">
+            <div style="font-size:40px; margin-bottom:16px;">🔒</div>
+            <h2 style="margin-bottom:8px;">Access Denied</h2>
+            <p style="color:var(--muted)">You do not have permission to view this page. Admin access required.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      await loadUsers();
+    });
+    
+    async function loadUsers() {
+      const db = window.db;
+      
+      // Fetch all users
+      const { data: users, error } = await db.from('profiles')
+        .select('id, full_name, email, role, is_active, manager_id');
+        
+      if (error) {
+        document.getElementById('userTableBody').innerHTML = `<tr><td colspan="5" style="color:var(--red);text-align:center;">Failed to load users: ${error.message}</td></tr>`;
+        return;
+      }
+      
+      // Create a map of managers for display
+      const userMap = {};
+      users.forEach(u => userMap[u.id] = u.full_name || u.email);
+      
+      const tbody = document.getElementById('userTableBody');
+      
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);">No users found.</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = users.map(u => {
+        const initial = (u.full_name || u.email || '?').charAt(0).toUpperCase();
+        const roleClass = `role-${(u.role || 'engineer').toLowerCase()}`;
+        const managerName = u.manager_id ? (userMap[u.manager_id] || 'Unknown') : '—';
+        
+        return `
+          <tr>
+            <td>
+              <div class="user-td-info">
+                <div class="user-avatar">${initial}</div>
+                <div>
+                  <span class="user-name">${u.full_name || '—'}</span>
+                  <span class="user-email">${u.email}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="role-badge ${roleClass}">${u.role || 'engineer'}</span>
+            </td>
+            <td>
+              <span style="font-size:13px; color:var(--muted);">${managerName}</span>
+            </td>
+            <td>
+              ${u.is_active 
+                ? '<span style="color:var(--green);font-size:13px;">● Active</span>' 
+                : '<span style="color:var(--muted);font-size:13px;">○ Inactive</span>'}
+            </td>
+            <td class="table-actions">
+              <button onclick="editUser('${u.id}')">Edit</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    function editUser(id) {
+      alert("Edit User dialog would open here for ID: " + id + "\nThis allows changing role and manager.");
+    }
+  </script>
+</body>
+</html>

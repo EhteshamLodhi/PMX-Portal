@@ -8,6 +8,10 @@
   <link
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@700&display=swap"
     rel="stylesheet">
+  <link href="/shared/layout.css" rel="stylesheet">
+  <script src="/shared/portalState.js"></script>
+  <script src="/shared/permissions.js"></script>
+  <script src="/shared/layout.js"></script>
   <style>
     :root {
       --dark: #0D1117;
@@ -517,17 +521,7 @@
     <div class="loading-txt">Loading…</div>
   </div>
 
-  <header class="hdr">
-    <div class="logo-row">
-      <div class="lmark">PM</div>
-      <div class="lname">Power<em>matix</em></div>
-    </div>
-    <div class="user-pill">
-      <div class="avatar" id="userAvatar">?</div>
-      <span id="userName" style="font-size:12px;color:var(--muted)">—</span>
-      <a href="/tracker/index.html" style="background:none;border:1px solid #3D444D;color:#56CCF2;font-size:11px;cursor:pointer;padding:4px 10px;border-radius:5px;text-decoration:none;margin-right:4px">← Tracker</a><button class="signout-btn" onclick="handleSignOut()">Sign out</button>
-    </div>
-  </header>
+  <div style="height:20px;"></div> <!-- Spacer for layout -->
 
   <div class="nav-tabs">
     <button class="ntab on" onclick="switchTab('today', this)">Today</button>
@@ -620,39 +614,16 @@
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // ── CONFIG ── Replace these two values ──────────────────────
-    const SUPABASE_URL = 'https://hrdkulmzlphkewraafmi.supabase.co';
-    const SUPABASE_ANON = 'sb_publishable_xzUWcC8k_OMShmJ_HvxP1g_JoJVyJeH';
-    // ────────────────────────────────────────────────────────────
-
-    const { createClient } = supabase;
-    const db = createClient(SUPABASE_URL, SUPABASE_ANON);
-
-    let currentUser = null;
-    let todayRecord = null;
-
     // ── INIT ──────────────────────────────────────────────────
-    async function init() {
-      const { data: { session } } = await db.auth.getSession();
-      if (!session) { window.location.href = '/index.html'; return; }
+    let db = window.db;
 
-      const { data: profile } = await db
-        .from('profiles')
-        .select('id, full_name, email, role, is_active')
-        .eq('id', session.user.id)
-        .single();
-
-      if (!profile?.is_active) { window.location.href = '/index.html?error=account_inactive'; return; }
-
+    window.addEventListener('portalStateLoaded', async () => {
+      db = window.db;
+      const profile = window.portalState.Profile;
       currentUser = profile;
-
-      // Render header
-      document.getElementById('userName').textContent = profile.full_name || profile.email;
-      document.getElementById('userAvatar').textContent = (profile.full_name || profile.email).charAt(0).toUpperCase();
 
       // Set date display
       const now = new Date();
-      const today = now.toISOString().slice(0, 10);
       document.getElementById('todayDateLbl').textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
       document.getElementById('corrDate').max = new Date(Date.now() - 86400000).toISOString().slice(0, 10); // yesterday max
 
@@ -660,7 +631,7 @@
       await refreshTodayView();
 
       document.getElementById('loadingOverlay').style.display = 'none';
-    }
+    });
 
     async function refreshTodayView() {
       const today = new Date().toISOString().slice(0, 10);
@@ -851,10 +822,6 @@
       if (id === 'history') loadHistory();
     }
 
-    function handleSignOut() {
-      db.auth.signOut().then(() => window.location.href = '/index.html');
-    }
-
     // ── FORMAT UTILS ──
     function formatTime(iso) {
       if (!iso) return '—';
@@ -878,9 +845,6 @@
       t.textContent = msg; t.className = 'toast ' + type; t.style.display = 'block';
       setTimeout(() => { t.style.display = 'none'; }, 3500);
     }
-
-    // ── START ──
-    init();
   </script>
 </body>
 

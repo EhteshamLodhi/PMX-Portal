@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Settings — Powermatix</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="/shared/layout.css" rel="stylesheet">
+  <script src="/shared/portalState.js"></script>
+  <script src="/shared/permissions.js"></script>
+  <script src="/shared/layout.js"></script>
+  <style>
+    .module-container { max-width: 900px; margin: 40px auto; padding: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="app-main">
+    <div class="module-container">
+      <h2 style="font-size:24px;margin-bottom:8px">Portal Settings</h2>
+      <p style="color:var(--muted)">Global application configurations. Construction in progress.</p>
+    </div>
+  </div>
+  
+  <script>
+    window.addEventListener('portalStateLoaded', async () => {
+      if (window.portalState.Profile.role !== 'admin') {
+        document.querySelector('.module-container').innerHTML = `
+          <div style="font-size:40px; margin-bottom:16px;">🔒</div>
+          <h2 style="margin-bottom:8px;">Access Denied</h2>
+          <p style="color:var(--muted)">You do not have permission to view this page. Admin access required.</p>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

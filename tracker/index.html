@@ -6,6 +6,10 @@
   <title>Powermatix — Resource Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="/shared/layout.css" rel="stylesheet">
+  <script src="/shared/portalState.js"></script>
+  <script src="/shared/permissions.js"></script>
+  <script src="/shared/layout.js"></script>
   <style>
     :root {
       --green:#2ECC71;--green-d:#27AE60;
@@ -243,14 +247,10 @@
   <div class="loading-txt" id="loadingMsg">Connecting to Powermatix cloud…</div>
 </div>
 
-<!-- HEADER -->
-<header class="hdr">
+<!-- TRACKER TOOLBAR -->
+<div class="hdr" style="top:60px;">
   <div class="logo">
-    <div class="lmark">PM</div>
-    <div>
-      <div class="lname">Power<em>matix</em></div>
-      <div class="lsub">Resource Allocation Tracker · 2026+</div>
-    </div>
+    <div class="lname" style="font-size:14px;color:var(--muted)">Tracker Module</div>
   </div>
   <div class="hdr-r">
     <div class="cfg-row">
@@ -264,17 +264,11 @@
         <option value="6" selected>6 (Mon–Sat)</option>
       </select>
     </div>
-    <button class="hbtn" onclick="openModal('projModal')">＋ Project</button>
-    <button class="hbtn" onclick="openModal('resModal')">＋ Resource</button>
-    <a href="/attendance/index.html" class="hbtn att">✓ Attendance</a>
+    <button class="hbtn" id="btnProj" onclick="openModal('projModal')">＋ Project</button>
+    <button class="hbtn" id="btnRes" onclick="openModal('resModal')">＋ Resource</button>
     <button class="hbtn g" id="saveBtn" onclick="doManualSave()">💾 Save</button>
-    <div class="user-info">
-      <div class="user-avatar" id="userAvatar">?</div>
-      <span id="userName" style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</span>
-      <button class="signout" onclick="handleSignOut()">Sign out</button>
-    </div>
   </div>
-</header>
+</div>
 
 <!-- TABS -->
 <div class="tabs">
@@ -382,16 +376,43 @@
   </div>
 </div>
 
-<script>
 // ════════════════════════════════════════════════════════════
-//  SUPABASE CONFIG  — replace with your actual values
+//  SUPABASE CONFIG  — Inherited from portalState.js
 // ════════════════════════════════════════════════════════════
-const SUPABASE_URL  = 'https://hrdkulmzlphkewraafmi.supabase.co';
-const SUPABASE_ANON = 'sb_publishable_xzUWcC8k_OMShmJ_HvxP1g_JoJVyJeH';
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+const db = window.db;
+
+window.addEventListener('portalStateLoaded', async () => {
+    // Basic Role-Based Visibility
+    const role = window.portalState.Profile.role;
+    if (role === 'engineer') {
+        document.getElementById('btnProj').style.display = 'none';
+        document.getElementById('btnRes').style.display = 'none';
+        document.getElementById('saveBtn').style.display = 'none';
+        const cfgSels = document.querySelectorAll('.cfg-inp, .cfg-sel');
+        cfgSels.forEach(el => el.disabled = true);
+    }
+    await loadInitialData();
 });
+
+async function loadInitialData() {
+    loadOrgSettings();
+    await loadProjectsFromCloud();
+    await loadResourcesFromCloud();
+    
+    const today = new Date();
+    if(today.getFullYear()>=2026) currentMon=isoMonday(dateToStr(today));
+    else currentMon='2026-01-05';
+
+    await loadWeekFromCloud(currentMon);
+    
+    buildSwatches();
+    buildYearSel();
+    syncYearWeekSelectors();
+    renderWeekly();
+    populatePeriodSel();
+    setSaveStatus('ok');
+}
+
 
 // ════════════════════════════════════════════════════════════
 //  IN-MEMORY STATE  (same structure as before)
@@ -1003,87 +1024,23 @@ async function doManualSave(){
 }
 
 // ════════════════════════════════════════════════════════════
-//  AUTH
+//  UI INITIALIZATION & HELPERS
 // ════════════════════════════════════════════════════════════
-async function handleSignOut(){
-  await db.auth.signOut();
-  window.location.href='/index.html';
+
+// The initialization sequence is now triggered by portalStateLoaded 
+// inside the event listener defined at the top of this script.
+
+function hideLoading() {
+  document.getElementById('loadingOverlay').style.display = 'none';
 }
 
-// ════════════════════════════════════════════════════════════
-//  INIT  — runs on page load
-// ════════════════════════════════════════════════════════════
-async function init(){
-  setLoadingMsg('Checking authentication…');
+// Ensure the loading overlay hides when load is complete
+const originalRenderWeekly = renderWeekly;
+renderWeekly = function() {
+    originalRenderWeekly();
+    hideLoading();
+};
 
-  // Auth guard
-  const {data:{session}}=await db.auth.getSession();
-  if(!session){
-    window.location.href='/index.html?redirect='+encodeURIComponent(window.location.pathname);
-    return;
-  }
-
-  setLoadingMsg('Loading your profile…');
-  const {data:profile,error:pErr}=await db.from('profiles')
-    .select('id,full_name,email,role,is_active')
-    .eq('id',session.user.id)
-    .single();
-
-  if(pErr || !profile){
-    // Profile might not exist yet — try to create it from Azure metadata
-    const meta=session.user.user_metadata||{};
-    const {data:newProfile}=await db.from('profiles').upsert({
-      id:session.user.id,
-      email:session.user.email,
-      full_name:meta.full_name||meta.name||session.user.email.split('@')[0],
-      role:'engineer',
-      is_active:true,
-    },{onConflict:'id'}).select().single();
-    currentUser=newProfile||{full_name:session.user.email,role:'engineer'};
-  } else if(!profile.is_active){
-    await db.auth.signOut();
-    window.location.href='/index.html?error=account_inactive';
-    return;
-  } else {
-    currentUser=profile;
-  }
-
-  // Render user info
-  const name=currentUser?.full_name||currentUser?.email||'User';
-  const el=document.getElementById('userAvatar'); if(el) el.textContent=name.charAt(0).toUpperCase();
-  const ne=document.getElementById('userName'); if(ne) ne.textContent=name;
-
-  setLoadingMsg('Loading projects…');
-  await loadProjectsFromCloud();
-
-  setLoadingMsg('Loading resources…');
-  await loadResourcesFromCloud();
-
-  setLoadingMsg('Loading settings…');
-  await loadOrgSettings();
-
-  // Set current week to first Monday of 2026 or current week if >= 2026
-  const today=new Date();
-  if(today.getFullYear()>=2026) currentMon=isoMonday(dateToStr(today));
-  else currentMon='2026-01-05';
-
-  setLoadingMsg('Loading week data…');
-  await loadWeekFromCloud(currentMon);
-
-  // Build UI
-  buildSwatches();
-  buildYearSel();
-  syncYearWeekSelectors();
-  renderWeekly();
-  populatePeriodSel();
-  setSaveStatus('ok');
-
-  // Hide loading overlay
-  document.getElementById('loadingOverlay').style.display='none';
-}
-
-// ── GO ──
-init();
 </script>
 </body>
 </html>
